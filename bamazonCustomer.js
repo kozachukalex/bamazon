@@ -29,8 +29,6 @@ function onStart() {
             message: "Hello. What would you like to do?",
             choices: ["Purchase Item", "Manage Inventory", "Sign Out"]
         }
-
-        // After the prompt, store the user's response in a variable called location.
     ]).then(function (response) {
         if (response.selection === "Purchase Item") {
             console.log("purchase item");
@@ -47,7 +45,6 @@ function onStart() {
         }
     });
 };
-// purchase - connection start and print the current stock of the database and new inq to item ID desired, and ask quantity desired
 function beginPurchase() {
     inquirer.prompt([
         {
@@ -58,9 +55,81 @@ function beginPurchase() {
         }
     ]).then(function (response) {
         if (response.selection === "All Products") {
-            readProducts();
+            console.log("Selecting all products...\n");
+            connection.query("SELECT * FROM products", function (err, res) {
+                if (err) throw err;
+                console.log(res);
+                inquirer.prompt([
+                    {
+                        type: "input",
+                        name: "id",
+                        message: "Enter the ID of the item you wish to purchase."
+                    },
+                    {
+                        type: "input",
+                        name: "purchaseQuantity",
+                        message: "How many would you like to purchase?"
+                    }
+                ])
+                    .then(function (response) {
+                        var id = response.id;
+                        var purchaseQuantity = parseInt(response.purchaseQuantity);
+                        inquirer.prompt([
+                            {
+                                type: "confirm",
+                                name: "confirmation",
+                                message: "Would you like to purchase " + purchaseQuantity + " of item ID: " + id + "?"
+                            }
+                        ]).then(function (response) {
+                            console.log(response);
+                            if (response.confirmation) {
+                                res.forEach(function (product) {
+                                    if (product.id == id) {
+                                        connection.query("SELECT * FROM products WHERE ?",
+                                            [
+                                                {
+                                                    id: id
+                                                }
+                                            ], function (err, res) {
+                                                if (err) throw err;
+                                                if (res[0].stock_quantity > purchaseQuantity) {
+                                                    var newStockQty = res[0].stock_quantity - purchaseQuantity;
+                                                    connection.query(
+                                                        "UPDATE products SET ? WHERE ?",
+                                                        [
+                                                          {
+                                                            stock_quantity: newStockQty
+                                                          },
+                                                          {
+                                                            id: id
+                                                          }
+                                                        ],
+                                                        function(error) {
+                                                          if (error) throw err;
+                                                          console.log("Item purchased successfully!");
+                                                          beginPurchase();
+                                                        }
+                                                      );
+                                                }
+                                                else {
+                                                    console.log("Insufficient stock. Please try again.");
+                                                    beginPurchase();
+                                                }
+                                            });
+                                    }
+                                });
+                            }
+                            else {
+                                console.log("Confirmation was denied. Returning to purchasing menu.")
+                                beginPurchase();
+                            }
+                        })
+                    })
+            }
+            )
         };
         if (response.selection === "Products by Department") {
+            console.log("This section has not yet been completed.");
             inquirer.prompt([
                 {
                     type: "list",
@@ -81,10 +150,6 @@ function beginPurchase() {
     })
 
 }
-// check if item is in stock and desired qty- if yes, verify final price- sell and remove from stock (can keep track of total sales per department on backend)
-// if no- notify customer, ask how many they would like to purchase again (repeat until qty is allowed)
-
-// restock - similiar, print stock, ask which item they would like to add stock to
 function manageInventory() {
     inquirer.prompt([
         {
@@ -93,103 +158,132 @@ function manageInventory() {
             message: "What would you like to do?",
             choices: ["Add new item", "Upstock stock quantity", "Return to main menu"]
         }
-    ]).then(function (response) {
-        if (response.selection === "Add new item") {
-            inquirer.prompt([
-                {
-                    type: "input",
-                    name: "name",
-                    message: "What product would you like to add?"
-                },
-                {
-                    type: "input",
-                    name: "department",
-                    message: "What department is the item in?"
-                },
-                {
-                    type: "input",
-                    name: "price",
-                    message: "What is the price of the item?"
-                },
-                {
-                    type: "input",
-                    name: "quantity",
-                    message: "How many of this item are there?"
-                }
-            ]).then(function (response) {
-                var newItem = {
-                    name: response.name,
-                    department: response.department,
-                    price: response.price,
-                    quantity: response.quantity
-                }
+    ])
+        .then(function (response) {
+            if (response.selection === "Add new item") {
                 inquirer.prompt([
                     {
-                        type: "confirm",
-                        name: "selection",
-                        message: "Is this information correct?"
+                        type: "input",
+                        name: "name",
+                        message: "What product would you like to add?"
+                    },
+                    {
+                        type: "input",
+                        name: "department",
+                        message: "What department is the item in?"
+                    },
+                    {
+                        type: "input",
+                        name: "price",
+                        message: "What is the price of the item?"
+                    },
+                    {
+                        type: "input",
+                        name: "quantity",
+                        message: "How many of this item are there?"
                     }
                 ]).then(function (response) {
-                    console.log(response.selection);
-                    console.log(newItem);
-                    if (response === true) {
-                        //usen a insert into method to create new item
-                        //newItem.name
-                        //newItem.department
-                        //newItem.price
-                        //newItem.quantity
+                    var newItem = {
+                        name: response.name,
+                        department: response.department,
+                        price: response.price,
+                        quantity: response.quantity
                     }
-                    else {
-                        console.log("Due to wrong information, item was not added.");
-                        manageInventory();
-                    }
+                    inquirer.prompt([
+                        {
+                            type: "confirm",
+                            name: "selection",
+                            message: "Is this information correct?"
+                        }
+                    ]).then(function (response) {
+                        console.log(response.selection);
+                        console.log(newItem);
+                        if (response.selection === true) {
+                            //usen a insert into method to create new item
+                            connection.query(
+                                "INSERT INTO products SET ?",
+                                {
+                                    product_name: newItem.name,
+                                    department_name: newItem.department,
+                                    price: newItem.price,
+                                    stock_quantity: newItem.quantity
+                                },
+                                function (err) {
+                                    if (err) throw err;
+                                    console.log("Item successfully added.")
+                                    manageInventory();
+                                }
+                            );
+                        }
+                        else {
+                            console.log("Due to wrong information, item was not added.");
+                            manageInventory();
+                        }
+                    });
                 });
-            });
-        }
-        if (response.selection === "Upstock stock quantity") {
-            readProducts();
-            inquirer.prompt([
-                {
-                    type: "input",
-                    name: "id",
-                    message: "Enter the ID of the item you wish to update quantity."
-                },
-                {
-                    type: "input",
-                    name: "newStock",
-                    message: "How many would you like to add to the inventory?"
-                }
-            ]).then(function (response) {
-                //read item at selected ID position
-                //read current stock at ID number, add newStock to it
-                console.log("Added # to (read name position)");
-            });
-        }
-        if (response.selection === "Return to main menu") {
-            onStart();
-        }
-    });
+            }
+            if (response.selection === "Upstock stock quantity") {
+                updateStockQty();
+
+            }
+            if (response.selection === "Return to main menu") {
+                onStart();
+            }
+        });
 };
-// verify id and product name
-// ask new qty, verify new qty,
-// update qty and reprint entire stock with updated qty
 
 // sign out- exits application
 function signOut() {
     connection.end();
 }
 
-function readProducts() {
+function updateStockQty() {
     console.log("Selecting all products...\n");
     connection.query("SELECT * FROM products", function (err, res) {
         if (err) throw err;
         console.log(res);
+        inquirer.prompt([
+            {
+                type: "input",
+                name: "id",
+                message: "Enter the ID of the item you wish to update quantity."
+            },
+            {
+                type: "input",
+                name: "newStock",
+                message: "How many would you like to add to the inventory?"
+            }
+        ]).then(function (response) {
+            if (err) throw err;
+            console.log(res);
+            for (i = 0; i < res.length; i++) {
+                if (res[i].id == response.id) {
+                    var chosenItem = res[i].id
+                    var newQuantity = parseInt(res[i].stock_quantity) + parseInt(response.newStock);
+                    console.log(chosenItem);
+                    console.log(newQuantity);
+                    connection.query(
+                        "UPDATE products SET ? WHERE ?",
+                        [
+                            {
+                                stock_quantity: newQuantity
+                            },
+                            {
+                                id: chosenItem
+                            }
+                        ],
+                        function (error) {
+                            if (error) throw err;
+                            console.log("Stock updated successfully to: " + newQuantity);
+                            manageInventory();
+                        }
+                    );
+                }
+            }
+        });
     });
 };
 
-function readByDepartment(department) {
-    //use a query to select using department
-};
 
 //begins application
 onStart();
